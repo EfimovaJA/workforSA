@@ -1,0 +1,66 @@
+Задание 2: проектирование API
+
+Описание:
+Интернет-магазин "Петрушка Зеленая" преуспевает, расширяется и в мобильном приложении решили создать новый экран, который будет отображать магазины партнеров (см. макеты ниже). P.S. макет не прикрепила
+Что нужно сделать:
+Написать пример REST API запроса, который будет вызываться при переходе пользователя на данный экран. 
+Привести пример ответа этого REST API в соответствии с макетом. Формат - JSON. Учесть, что при клике на плашку магазина должен осуществляться переход по ссылке на внешний ресурс. 
+
+Решение: 
+1. Пример REST API запроса
+Заголовки:
+- `Authorization: Bearer {token}` 
+- `Accept: application/json`
+Параметры запроса:
+- `limit=10` (для пагинации)
+- `sort_by=delivery_time` (если нужно сортировать по времени доставки)
+
+Пример запроса в формате cURL:
+```
+curl -X GET "https://api.petruha-zelenaya.com/api/partners?limit=4" \
+-H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c" \
+-H "Accept: application/json"
+```
+2. Пример ответа REST API в JSON
+Ответ соответствует макету: список партнеров с названием, описанием, логотипом, ссылкой для перехода и временем доставки.
+
+```json
+{
+  "status": "success",
+  "total_count": 4,
+  "partners": [
+    {
+      "id": 1,
+      "name": "Метро",
+      "description": "Крупная сеть гипермаркетов с широким ассортиментом товаров. Доступна доставка продуктов и товаров для дома.",
+      "logo_url": "https://example.com/partners/metro/logo.png",
+      "link": "https://metro.ru",
+      "delivery_time": "21:00 - 23:00"
+    },
+    {
+      "id": 2,
+      "name": "Ашан",
+      "description": "Французская сеть гипермаркетов с акцентом на низкие цены и большой выбор продуктов.",
+      "logo_url": "https://example.com/partners/auchan/logo.png",
+      "link": "https://auchan.ru",
+      "delivery_time": "18:00 - 20:00"
+    },
+    {
+      "id": 3,
+      "name": "ВкусВилл",
+      "description": "Сеть магазинов здорового питания с натуральными продуктами и быстрой доставкой.",
+      "logo_url": "https://example.com/partners/vkusvill/logo.png",
+      "link": "https://vkusvill.ru",
+      "delivery_time": "Быстрая от 30 мин до 60 мин"
+    },
+    {
+      "id": 4,
+      "name": "Виктория",
+      "description": "Региональная сеть супермаркетов с свежими продуктами и удобной доставкой.",
+      "logo_url": "https://example.com/partners/victoria/logo.png",
+      "link": "https://victoria.ru",
+      "delivery_time": "17:00 - 19:00"
+    }
+  ]
+}
+```

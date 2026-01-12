@@ -1,0 +1,162 @@
+Задание 3: архитектура
+Описание:
+Заказчик хочет, что в мобильное приложение интернет-магазина "Петрушка Зеленая" начали приходить пуши. Они могут быть разными: о том, что заказ слишком долго лежит без действий в корзине, об отмене заказа, рекламные рассылки и прочее. То есть нужен функционал, а какие пуши отправлять - точно найдется.
+Что нужно сделать:
+Построить верхнеуровневую архитектурую схему - как должна работать отправка PUSH уведомлений в данном приложении. Можно просто в виде блок схем. Считаем, что на бэкенде микросервисная архитектура. В данном задании рекомендуется в интернете изучить архитектуры подобных решений.
+Быть готовым на собеседовании обсудить эту схему.
+
+```mermaid
+graph TB
+    subgraph "Мобильные устройства пользователей"
+        IOS[iOS App]
+        AND[Android App]
+    end
+    
+    subgraph "Шлюз и API"
+        APIGW[API Gateway]
+    end
+    
+    subgraph "Центральный сервис уведомлений (Notification Service)"
+        NS[Notification Service<br/>Оркестратор]
+        NTDB[(Notification DB<br/>Шаблоны, логи, токены)]
+        TEMP[Template Engine<br/>Персонализация]
+    end
+    
+    subgraph "Бизнес-микросервисы (источники событий)"
+        CART[Cart Service<br/>Корзина]
+        ORDER[Order Service<br/>Заказы]
+        MKT[Marketing Service<br/>Маркетинг]
+        CAT[Catalog Service<br/>Каталог]
+    end
+    
+    subgraph "Событийная шина (Event Bus)"
+        MSG[Message Broker<br/>Kafka/RabbitMQ/SQS]
+        TOP1[Topic: cart_events]
+        TOP2[Topic: order_events] 
+        TOP3[Topic: marketing_events]
+    end
+    
+    subgraph "Рабочие процессы (Workers)"
+        EVP[Event Processor<br/>Фильтрация и обогащение]
+        PRIO[Priority Queue Manager<br/>Очереди по приоритету]
+    end
+    
+    subgraph "Провайдеры доставки"
+        FCM[Firebase Cloud Messaging<br/>Android]
+        APNS[Apple Push Notification Service<br/>iOS]
+        SMS[SMS Gateway<br/>Опционально]
+        EMAIL[Email Service<br/>Опционально]
+    end
+    
+    subgraph "Мониторинг и аналитика"
+        MON[Monitoring<br/>Prometheus/Grafana]
+        LOG[Logging<br/>ELK Stack]
+        ANA[Analytics DB]
+    end
+    
+    %% Регистрация устройств
+    IOS -->|1. Регистрация device token| APIGW
+    AND -->|1. Регистрация device token| APIGW
+    APIGW -->|2. Сохранение токена| NS
+    NS -->|3. Привязка к user_id| NTDB
+    
+    %% Генерация событий
+    CART -->|4.1. "cart_abandoned"| TOP1
+    ORDER -->|4.2. "order_cancelled"| TOP2
+    MKT -->|4.3. "promo_activated"| TOP3
+    CAT -->|4.4. "price_dropped"| TOP1
+    
+    %% Обработка событий
+    TOP1 -->|5. Подписка на события| EVP
+    TOP2 -->|5. Подписка на события| EVP
+    TOP3 -->|5. Подписка на события| EVP
+    EVP -->|6. Фильтры и бизнес-правила| PRIO
+    PRIO -->|7. Приоритетная очередь| NS
+    
+    %% Подготовка и отправка
+    NS -->|8. Выбор шаблона| TEMP
+    TEMP -->|9. Персонализация| NS
+    NS -->|10.1. Отправка Android| FCM
+    NS -->|10.2. Отправка iOS| APNS
+    NS -->|10.3. Отправка SMS/Email| SMS
+    NS -->|10.3. Отправка SMS/Email| EMAIL
+    
+    %% Доставка пользователям
+    FCM -->|11.1. Доставка| AND
+    APNS -->|11.2. Доставка| IOS
+    SMS -->|11.3. Доставка| AND
+    EMAIL -->|11.4. Доставка| IOS
+    
+    %% Обратная связь и логирование
+    FCM -->|12. Delivery receipt| NS
+    APNS -->|12. Delivery receipt| NS
+    NS -->|13. Логирование| NTDB
+    NS -->|14. Метрики| MON
+    NS -->|15. Логи| LOG
+    NTDB -->|16. Аналитика| ANA
+    
+    %% Управление и конфигурация
+    ADMIN[Admin Portal] -->|17. Управление шаблонами<br/>и правилами| NS
+    
+    classDef mobile fill:#e1f5fe,stroke:#01579b
+    classDef gateway fill:#f3e5f5,stroke:#4a148c
+    classDef notification fill:#e8f5e8,stroke:#1b5e20
+    classDef business fill:#fff3e0,stroke:#e65100
+    classDef eventing fill:#e3f2fd,stroke:#1565c0
+    classDef workers fill:#f3e5f5,stroke:#7b1fa2
+    classDef providers fill:#ffebee,stroke:#c62828
+    classDef monitoring fill:#f5f5f5,stroke:#616161
+    classDef admin fill:#e8f5e8,stroke:#2e7d32
+    
+    class IOS,AND mobile
+    class APIGW gateway
+    class NS,NTDB,TEMP notification
+    class CART,ORDER,MKT,CAT business
+    class MSG,TOP1,TOP2,TOP3 eventing
+    class EVP,PRIO workers
+    class FCM,APNS,SMS,EMAIL providers
+    class MON,LOG,ANA monitoring
+    class ADMIN admin
+```
+Ключевые компоненты и их назначение:
+1. Регистрация устройств (Device Registration)
+- Мобильные приложения (iOS/Android) при первом запуске регистрируют `device token` через FCM/APNS SDK
+- API Gateway принимает токен и передает в Notification Service
+- Notification Service сохраняет токен в БД, привязывая к `user_id` (после аутентификации)
+
+2. Генерация событий (Event Generation)
+- Бизнес-микросервисы генерируют события при бизнес-действиях:
+  - Cart Service: `cart_abandoned` (корзина не трогалась N часов)
+  - Order Service: `order_created`, `order_cancelled`, `order_shipped`
+  - Marketing Service: `promo_activated`, `seasonal_campaign`
+  - Catalog Service: `price_dropped`, `back_in_stock`
+- События публикуются в Message Broker по соответствующим топикам
+
+3. Обработка событий (Event Processing)
+- Event Processor подписывается на топики и применяет бизнес-правила:
+  - Фильтрация (не спамить слишком часто)
+  - Сегментация пользователей
+  - Проверка настроек уведомлений пользователя
+- Priority Queue Manager сортирует уведомления по приоритету (срочные, маркетинговые и т.д.)
+
+4. Подготовка и отправка (Preparation & Delivery)
+- Notification Service получает события из очереди:
+  - Выбирает шаблон из БД
+  - Персонализирует контент (имя, товары, цены)
+  - Определяет канал доставки (push/SMS/email)
+- Отправляет через соответствующих провайдеров:
+  - FCM для Android
+  - APNS для iOS
+  - SMS/Email Gateway для fallback или важных уведомлений
+
+5. Мониторинг и аналитика (Monitoring & Analytics)
+- Monitoring: метрики доставки, ошибки, latency
+- Logging: детальные логи для отладки
+- Analytics DB: хранение данных для отчетов (CTR, конверсии)
+- Admin Portal: управление шаблонами, правилами, ручная отправка
+
+1. каждый сервис отвечает за свою зону
+2. события не блокируют бизнес-логику
+3.  можно масштабировать независимо
+4. мультиканальность - поддержка push/SMS/email из одной системы
+5. гибкость правил - легкое добавление новых типов уведомлений
